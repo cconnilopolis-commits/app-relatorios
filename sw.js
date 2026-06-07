@@ -1,4 +1,4 @@
-const CACHE_NAME = 'app-relatorios-v1';
+const CACHE_NAME = 'app-relatorios-v2';
 const arquivosParaCache = [
   './',
   './index.html',
@@ -7,7 +7,6 @@ const arquivosParaCache = [
   './icone.png'
 ];
 
-// Instala o motor e guarda os arquivos no cache
 self.addEventListener('install', evento => {
   evento.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
@@ -16,11 +15,20 @@ self.addEventListener('install', evento => {
   );
 });
 
-// Intercepta os acessos: se não tiver internet, puxa do cache
 self.addEventListener('fetch', evento => {
   evento.respondWith(
     caches.match(evento.request).then(resposta => {
       return resposta || fetch(evento.request);
     })
+  );
+});
+
+self.addEventListener('activate', evento => {
+  evento.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.map(key => {
+        if (key !== CACHE_NAME) return caches.delete(key);
+      })
+    ))
   );
 });
