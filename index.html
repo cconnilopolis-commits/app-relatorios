@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios de Manutenção</title>
+    <style>
+        /* Variáveis de cor e design limpo */
+        :root {
+            --primaria: #0056b3;
+            --secundaria: #28a745;
+            --fundo: #f4f7f6;
+            --texto: #333;
+            --borda: #ccc;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--fundo);
+            color: var(--texto);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .oculto { display: none !important; }
+        
+        /* Botões */
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .btn-primario { background-color: var(--primaria); color: white; }
+        .btn-sucesso { background-color: var(--secundaria); color: white; width: 100%; padding: 15px; font-size: 16px;}
+        .btn-ia { background-color: #6f42c1; color: white; margin-top: 10px; width: 100%;}
+        .btn-perigo { background-color: #dc3545; color: white; }
+        .btn-voltar { background-color: #6c757d; color: white; margin-bottom: 20px;}
+        
+        /* Formulários */
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid var(--borda);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea { resize: vertical; height: 120px; }
+        
+        /* Cabeçalho */
+        .cabecalho {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--primaria);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        /* Tabela */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid var(--borda); padding: 10px; text-align: left; }
+        th { background-color: var(--primaria); color: white; }
+    </style>
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+<div class="container">
+    <div id="tela-inicial">
+        <div class="cabecalho">
+            <h2>Painel de Serviços</h2>
+            <button class="btn-primario" onclick="abrirConfiguracoes()">⚙️ Cadastros</button>
+        </div>
+        <button class="btn-sucesso" onclick="abrirLancamento()">➕ Novo Serviço</button>
+        
+        <h3 style="margin-top: 30px;">Últimos Registros</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Local</th>
+                    <th>Resumo</th>
+                </tr>
+            </thead>
+            <tbody id="tabela-registros">
+                </tbody>
+        </table>
+        <br>
+        <button class="btn-primario" onclick="gerarRelatorioPDF()" style="width: 100%;">📄 Gerar Relatório PDF</button>
+    </div>
+
+    <div id="tela-lancamento" class="oculto">
+        <button class="btn-voltar" onclick="voltarInicio()">⬅ Voltar</button>
+        <h2>Registrar Novo Serviço</h2>
+        
+        <label>Data:</label>
+        <input type="date" id="form-data">
+        
+        <label>Local:</label>
+        <select id="form-local" onchange="verificarNovoLocal(this)">
+            </select>
+        
+        <label>Item (Opcional):</label>
+        <select id="form-item">
+            </select>
+
+        <label>Evidência Fotográfica:</label>
+        <input type="file" id="form-foto" accept="image/*">
+        
+        <label>Descrição do Serviço (Seu jeito):</label>
+        <textarea id="form-descricao" placeholder="Digite o que foi feito..."></textarea>
+        
+        <button class="btn-ia" id="btn-ia" onclick="corrigirTextoIA()">✨ Ajustar para Termos Técnicos (IA)</button>
+        <p id="status-ia" style="font-size: 12px; color: #666; display: none;">Carregando Motor de Inteligência...</p>
+        
+        <br><br>
+        <button class="btn-sucesso" onclick="salvarServico()">💾 Salvar Serviço</button>
+    </div>
+
+    <div id="tela-configuracao" class="oculto">
+        <button class="btn-voltar" onclick="voltarInicio()">⬅ Voltar</button>
+        <h2>Gerenciar Cadastros</h2>
+        
+        <div>
+            <h3>Locais</h3>
+            <input type="text" id="novo-local" placeholder="Nome do novo local..." style="width: 70%;">
+            <button class="btn-primario" onclick="adicionarLocalConfig()">➕ Add</button>
+            <ul id="lista-locais"></ul>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>Itens</h3>
+            <input type="text" id="novo-item" placeholder="Nome do novo item..." style="width: 70%;">
+            <button class="btn-primario" onclick="adicionarItemConfig()">➕ Add</button>
+            <ul id="lista-itens"></ul>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('Motor Offline ativado!', reg))
+        .catch(err => console.error('Erro no Motor Offline', err));
+    });
+  }
+</script>
+</body>
+</html>
