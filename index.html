@@ -42,6 +42,7 @@
         .btn-sucesso { background-color: var(--secundaria); color: white; width: 100%; padding: 15px; font-size: 16px;}
         .btn-ia { background-color: #6f42c1; color: white; margin-top: 10px; width: 100%;}
         .btn-voltar { background-color: #6c757d; color: white; margin-bottom: 20px;}
+        .btn-perigo { background-color: #dc3545; color: white; }
         
         label { display: block; margin-top: 15px; font-weight: bold; }
         input, select, textarea {
@@ -77,6 +78,14 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+
+        .painel-destaque {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid var(--borda);
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -100,8 +109,16 @@
             </thead>
             <tbody id="tabela-registros"></tbody>
         </table>
-        <br>
-        <button class="btn-primario" onclick="gerarRelatorioPDF()" style="width: 100%;">📄 Gerar Relatório PDF</button>
+        
+        <div class="painel-destaque">
+            <label style="margin-top: 0;">Filtrar Relatório por Data:</label>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <input type="date" id="filtro-data-inicio" style="margin-top: 0;">
+                <input type="date" id="filtro-data-fim" style="margin-top: 0;">
+            </div>
+            <small style="color: #666; display: block; margin-top: 8px;">Deixe em branco para exportar todos os registros.</small>
+            <button class="btn-primario" onclick="gerarRelatorioPDF()" style="width: 100%; margin-top: 15px;">📄 Gerar Relatório PDF</button>
+        </div>
     </div>
 
     <div id="tela-lancamento" class="oculto">
@@ -133,11 +150,21 @@
     <div id="tela-configuracao" class="oculto">
         <button class="btn-voltar" onclick="voltarInicio()">⬅ Voltar</button>
         <h2>Gerenciar Cadastros</h2>
+
+        <div class="painel-destaque" style="background: #eef2f5;">
+            <h3 style="margin-top: 0;">🤖 Configuração da IA (Chave API)</h3>
+            <p style="font-size: 0.9em; color: #555;">Insira sua chave de API para o OpenRouter ou Groq. Ela fica salva apenas neste navegador.</p>
+            <input type="password" id="input-api-key" placeholder="Ex: sk-or-... ou gsk_...">
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button class="btn-primario" onclick="salvarChaveAPI()" style="flex: 1;">💾 Salvar Chave</button>
+                <button class="btn-perigo" onclick="excluirChaveAPI()" style="flex: 1;">🗑️ Excluir</button>
+            </div>
+        </div>
         
         <div>
             <h3>Locais</h3>
             <div style="display: flex; gap: 10px;">
-                <input type="text" id="novo-local" placeholder="Nome do novo local...">
+                <input type="text" id="novo-local" placeholder="Nome do novo local..." style="margin-top: 0;">
                 <button class="btn-primario" onclick="adicionarLocalConfig()">➕ Add</button>
             </div>
             <ul id="lista-locais" class="lista-cadastros" style="padding: 0; list-style: none; margin-top: 20px;"></ul>
@@ -146,7 +173,7 @@
         <div style="margin-top: 40px;">
             <h3>Itens</h3>
             <div style="display: flex; gap: 10px;">
-                <input type="text" id="novo-item" placeholder="Nome do novo item...">
+                <input type="text" id="novo-item" placeholder="Nome do novo item..." style="margin-top: 0;">
                 <button class="btn-primario" onclick="adicionarItemConfig()">➕ Add</button>
             </div>
             <ul id="lista-itens" class="lista-cadastros" style="padding: 0; list-style: none; margin-top: 20px;"></ul>

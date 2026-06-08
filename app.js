@@ -53,6 +53,10 @@ window.abrirConfiguracoes = function() {
     document.getElementById('tela-inicial').classList.add('oculto');
     document.getElementById('tela-configuracao').classList.remove('oculto');
     atualizarListasConfig();
+    
+    // Carrega a chave de API salva no dispositivo do usuário
+    const chaveSalva = localStorage.getItem('api_key_ia') || '';
+    document.getElementById('input-api-key').value = chaveSalva;
 }
 
 // ==========================================
@@ -191,7 +195,7 @@ function carregarRegistros() {
 }
 
 // ==========================================
-// INTELIGÊNCIA ARTIFICIAL (COM PROGRESSO)
+// INTELIGÊNCIA ARTIFICIAL (MOTOR ULTRALEVE)
 // ==========================================
 window.corrigirTextoIA = async function() {
     const textoOriginal = document.getElementById('form-descricao').value;
@@ -205,46 +209,64 @@ window.corrigirTextoIA = async function() {
 
     try {
         if (!geradorIA) {
-            geradorIA = await pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat', {
+            // Trocamos para o SmolLM-135M: Pesa menos de 100MB e não estoura a RAM do celular
+            geradorIA = await pipeline('text-generation', 'Xenova/SmolLM-135M-Instruct', {
                 progress_callback: dados => {
                     if (dados.status === 'progress') {
                         status.innerText = `Baixando IA: ${Math.round(dados.progress)}% concluído (Apenas no 1º uso)...`;
                     } else if (dados.status === 'ready') {
-                        status.innerText = "Download concluído! Carregando memória...";
+                        status.innerText = "Download concluído! Montando rede neural na memória...";
                     }
                 }
             });
         }
 
-        const prompt = `<|im_start|>user\nReescreva o seguinte relato de manutenção em linguagem técnica formal, corrigindo erros. Seja direto. Relato: "${textoOriginal}"<|im_end|>\n<|im_start|>assistant\n`;
+        const prompt = `<|im_start|>user\nReescreva este relato informal em linguagem técnica formal e direta. Relato: "${textoOriginal}"<|im_end|>\n<|im_start|>assistant\n`;
         status.innerText = "Processando texto... (Aguarde)";
-        const resultado = await geradorIA(prompt, { max_new_tokens: 150 });
+        
+        const resultado = await geradorIA(prompt, { max_new_tokens: 100 });
         
         document.getElementById('form-descricao').value = resultado[0].generated_text.split('<|im_start|>assistant\n')[1].trim();
         status.innerText = "Concluído!";
     } catch (erro) {
-        console.error(erro);
-        status.innerText = "Erro ao carregar IA. Verifique a internet e tente novamente.";
+        console.error("Erro completo:", erro);
+        // Agora o erro real e técnico será impresso na tela do celular para sabermos exatamente o que falhou
+        status.innerText = `Erro Técnico: ${erro.message}`;
     } finally {
         btn.disabled = false;
-        setTimeout(() => status.style.display = 'none', 4000);
+        // Só esconde a mensagem se deu certo. Se der erro, a mensagem fica na tela para lermos.
+        setTimeout(() => { if(status.innerText === "Concluído!") status.style.display = 'none'; }, 4000);
     }
 }
-
 // ==========================================
-// GERAÇÃO DE RELATÓRIO PDF
+// GERAÇÃO DE RELATÓRIO PDF (COM FILTRO)
 // ==========================================
 window.gerarRelatorioPDF = function() {
+    const dataInicio = document.getElementById('filtro-data-inicio').value;
+    const dataFim = document.getElementById('filtro-data-fim').value;
+
     const transaction = db.transaction(["servicos"], "readonly");
     const request = transaction.objectStore("servicos").getAll();
 
     request.onsuccess = function() {
-        const registros = request.result;
-        if (registros.length === 0) { alert("Não há serviços registrados."); return; }
+        let registros = request.result;
+
+        // Aplica o filtro de datas se o usuário preencheu os campos
+        if (dataInicio && dataFim) {
+            registros = registros.filter(r => r.data >= dataInicio && r.data <= dataFim);
+        } else if (dataInicio) {
+            registros = registros.filter(r => r.data >= dataInicio);
+        } else if (dataFim) {
+            registros = registros.filter(r => r.data <= dataFim);
+        }
+
+        if (registros.length === 0) { 
+            alert("Não há serviços registrados para este período."); 
+            return; 
+        }
 
         let htmlTabela = '';
         registros.forEach((r, index) => {
-            // A FOTO FOI REDIMENSIONADA AQUI PARA O TAMANHO IDEAL NA FOLHA A4
             const imgTag = r.foto ? `<img src="${r.foto}" style="max-width: 250px; max-height: 250px; object-fit: contain; border-radius: 4px;">` : 'Sem foto';
             htmlTabela += `
                 <tr>
@@ -256,6 +278,12 @@ window.gerarRelatorioPDF = function() {
                 </tr>
             `;
         });
+
+        // Define o subtítulo do relatório com base no filtro
+        let periodoTexto = "Todos os registros exportados";
+        if (dataInicio && dataFim) periodoTexto = `De ${dataInicio.split('-').reverse().join('/')} até ${dataFim.split('-').reverse().join('/')}`;
+        else if (dataInicio) periodoTexto = `A partir de ${dataInicio.split('-').reverse().join('/')}`;
+        else if (dataFim) periodoTexto = `Até ${dataFim.split('-').reverse().join('/')}`;
 
         const janelaRelatorio = window.open('', '', 'width=1000,height=800');
         janelaRelatorio.document.write(`
@@ -277,7 +305,7 @@ window.gerarRelatorioPDF = function() {
                 </head>
                 <body>
                     <h2>Relatório de Manutenção</h2>
-                    <p><strong>Período:</strong> Todos os registros exportados</p>
+                    <p><strong>Período:</strong> ${periodoTexto}</p>
                     <table>
                         <thead>
                             <tr>
