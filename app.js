@@ -1,10 +1,10 @@
-import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
-
 // ==========================================
 // ESTADO E BANCO DE DADOS OFFLINE
 // ==========================================
 let db;
-let geradorIA = null;
+let servicoEmEdicaoId = null;
+let fotoAtualEdicao = null;
+
 const request = indexedDB.open("AppRelatorios", 1);
 
 request.onupgradeneeded = function(event) {
@@ -33,7 +33,7 @@ function inserirPadrao(tabela, valor) {
 }
 
 // ==========================================
-// NAVEGAÇÃO
+// NAVEGAÇÃO E CONTROLE DE TELAS
 // ==========================================
 window.voltarInicio = function() {
     document.getElementById('tela-inicial').classList.remove('oculto');
@@ -43,9 +43,14 @@ window.voltarInicio = function() {
 }
 
 window.abrirLancamento = function() {
+    servicoEmEdicaoId = null;
+    fotoAtualEdicao = null;
+    document.getElementById('form-descricao').value = '';
+    document.getElementById('form-foto').value = '';
+    document.getElementById('form-data').valueAsDate = new Date();
+    
     document.getElementById('tela-inicial').classList.add('oculto');
     document.getElementById('tela-lancamento').classList.remove('oculto');
-    document.getElementById('form-data').valueAsDate = new Date();
     carregarDropdowns();
 }
 
@@ -54,13 +59,33 @@ window.abrirConfiguracoes = function() {
     document.getElementById('tela-configuracao').classList.remove('oculto');
     atualizarListasConfig();
     
-    // Carrega a chave de API salva no dispositivo do usuário
     const chaveSalva = localStorage.getItem('api_key_ia') || '';
     document.getElementById('input-api-key').value = chaveSalva;
 }
 
 // ==========================================
-// CONFIGURAÇÕES (CRUD COMPLETO)
+// GERENCIADOR DE CHAVE API (LOCALSTORAGE)
+// ==========================================
+window.salvarChaveAPI = function() {
+    const chave = document.getElementById('input-api-key').value.trim();
+    if(chave) {
+        localStorage.setItem('api_key_ia', chave);
+        alert('Chave API salva com sucesso neste dispositivo!');
+    } else {
+        alert('Por favor, cole uma chave válida antes de salvar.');
+    }
+}
+
+window.excluirChaveAPI = function() {
+    if(confirm('Tem certeza que deseja remover sua chave de API deste dispositivo?')) {
+        localStorage.removeItem('api_key_ia');
+        document.getElementById('input-api-key').value = '';
+        alert('Chave excluída com sucesso.');
+    }
+}
+
+// ==========================================
+// CONFIGURAÇÕES (CRUD COMPLETO CADASTROS)
 // ==========================================
 window.adicionarLocalConfig = function() {
     const nome = document.getElementById('novo-local').value.trim();
@@ -120,7 +145,7 @@ function atualizarListasConfig() {
 }
 
 // ==========================================
-// FORMULÁRIO E BANCO DE DADOS
+// FORMULÁRIO E BANCO DE DADOS DE SERVIÇOS
 // ==========================================
 function carregarDropdowns() {
     const transaction = db.transaction(["locais", "itens"], "readonly");
@@ -164,21 +189,63 @@ window.salvarServico = function() {
         reader.onload = e => gravarNoBanco(data, local, item, descricao, e.target.result);
         reader.readAsDataURL(fotoInput.files[0]);
     } else {
-        gravarNoBanco(data, local, item, descricao, null);
+        gravarNoBanco(data, local, item, descricao, fotoAtualEdicao);
     }
 }
 
 function gravarNoBanco(data, local, item, desc, fotoBase64) {
     const transaction = db.transaction(["servicos"], "readwrite");
     const store = transaction.objectStore("servicos");
-    store.add({ data, local, item, descricao: desc, foto: fotoBase64, timestamp: new Date().getTime() });
+    
+    const registro = { data, local, item, descricao: desc, foto: fotoBase64, timestamp: new Date().getTime() };
+    
+    if (servicoEmEdicaoId) {
+        registro.id = servicoEmEdicaoId;
+        store.put(registro); // Atualiza
+    } else {
+        store.add(registro); // Cria novo
+    }
     
     transaction.oncomplete = function() {
-        alert("Serviço salvo com sucesso!");
-        document.getElementById('form-descricao').value = "";
-        document.getElementById('form-foto').value = "";
+        alert(servicoEmEdicaoId ? "Serviço atualizado com sucesso!" : "Serviço salvo com sucesso!");
         voltarInicio();
     };
+}
+
+// EDIÇÃO DE SERVIÇOS
+window.editarServico = function(id) {
+    const transaction = db.transaction(["servicos"], "readonly");
+    const request = transaction.objectStore("servicos").get(id);
+    
+    request.onsuccess = function(e) {
+        const servico = e.target.result;
+        if(!servico) return;
+        
+        servicoEmEdicaoId = servico.id;
+        fotoAtualEdicao = servico.foto;
+        
+        document.getElementById('form-data').value = servico.data;
+        document.getElementById('form-descricao').value = servico.descricao;
+        document.getElementById('form-foto').value = ''; // Input file não pode ser preenchido via JS
+        
+        carregarDropdowns();
+        setTimeout(() => {
+            document.getElementById('form-local').value = servico.local;
+            document.getElementById('form-item').value = servico.item;
+        }, 150);
+        
+        document.getElementById('tela-inicial').classList.add('oculto');
+        document.getElementById('tela-lancamento').classList.remove('oculto');
+    };
+}
+
+// EXCLUSÃO DE SERVIÇOS
+window.excluirServico = function(id) {
+    if(confirm("Tem certeza que deseja excluir permanentemente este serviço?")) {
+        const transaction = db.transaction(["servicos"], "readwrite");
+        transaction.objectStore("servicos").delete(id);
+        transaction.oncomplete = () => carregarRegistros();
+    }
 }
 
 function carregarRegistros() {
@@ -187,57 +254,84 @@ function carregarRegistros() {
     request.onsuccess = function() {
         const tabela = document.getElementById('tabela-registros');
         tabela.innerHTML = "";
-        const registros = request.result.reverse().slice(0, 10); 
+        
+        // Ordena do mais recente para o mais antigo e pega os últimos 15
+        const registros = request.result.sort((a, b) => b.timestamp - a.timestamp).slice(0, 15); 
+        
         registros.forEach(r => {
-            tabela.innerHTML += `<tr><td>${r.data}</td><td>${r.local}</td><td>${r.descricao.substring(0, 30)}...</td></tr>`;
+            tabela.innerHTML += `
+                <tr>
+                    <td>${r.data.split('-').reverse().join('/')}</td>
+                    <td>${r.local}</td>
+                    <td>${r.descricao.substring(0, 30)}...</td>
+                    <td style="text-align: center;">
+                        <button onclick="editarServico(${r.id})" style="background:#ffc107; border:none; padding:5px 8px; border-radius:3px; cursor:pointer;" title="Editar">✏️</button>
+                        <button onclick="excluirServico(${r.id})" style="background:#dc3545; color:white; border:none; padding:5px 8px; border-radius:3px; cursor:pointer;" title="Excluir">🗑️</button>
+                    </td>
+                </tr>
+            `;
         });
     };
 }
 
 // ==========================================
-// INTELIGÊNCIA ARTIFICIAL (MOTOR ULTRALEVE)
+// INTELIGÊNCIA ARTIFICIAL (API GROQ)
 // ==========================================
 window.corrigirTextoIA = async function() {
     const textoOriginal = document.getElementById('form-descricao').value;
-    if (!textoOriginal) { alert("Digite algo na descrição primeiro!"); return; }
+    if (!textoOriginal) { alert("Digite algo na descrição primeiro para a IA corrigir!"); return; }
+
+    const apiKey = localStorage.getItem('api_key_ia');
+    if (!apiKey) {
+        alert("Chave de API não configurada! Vá nas configurações (⚙️ Cadastros) e cole sua chave da Groq.");
+        return;
+    }
 
     const btn = document.getElementById('btn-ia');
     const status = document.getElementById('status-ia');
     btn.disabled = true;
     status.style.display = 'block';
-    status.innerText = "Iniciando motor de IA...";
+    status.innerText = "Processando texto via Groq...";
 
     try {
-        if (!geradorIA) {
-            // Trocamos para o SmolLM-135M: Pesa menos de 100MB e não estoura a RAM do celular
-            geradorIA = await pipeline('text-generation', 'Xenova/SmolLM-135M-Instruct', {
-                progress_callback: dados => {
-                    if (dados.status === 'progress') {
-                        status.innerText = `Baixando IA: ${Math.round(dados.progress)}% concluído (Apenas no 1º uso)...`;
-                    } else if (dados.status === 'ready') {
-                        status.innerText = "Download concluído! Montando rede neural na memória...";
-                    }
-                }
-            });
+        const resposta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    { 
+                        role: "system", 
+                        content: "Você é um assistente técnico de engenharia e manutenção. Sua tarefa é reescrever o relato do usuário utilizando linguagem estritamente técnica, formal, clara e direta para compor um relatório de manutenção oficial. NÃO adicione introduções, encerramentos, aspas ou comentários. Retorne APENAS o texto reescrito." 
+                    },
+                    { role: "user", content: textoOriginal }
+                ],
+                temperature: 0.3,
+                max_tokens: 500
+            })
+        });
+
+        if (!resposta.ok) {
+            const erroDetalhado = await resposta.json();
+            throw new Error(erroDetalhado.error?.message || "Falha ao comunicar com a Groq.");
         }
 
-        const prompt = `<|im_start|>user\nReescreva este relato informal em linguagem técnica formal e direta. Relato: "${textoOriginal}"<|im_end|>\n<|im_start|>assistant\n`;
-        status.innerText = "Processando texto... (Aguarde)";
-        
-        const resultado = await geradorIA(prompt, { max_new_tokens: 100 });
-        
-        document.getElementById('form-descricao').value = resultado[0].generated_text.split('<|im_start|>assistant\n')[1].trim();
+        const dados = await resposta.json();
+        document.getElementById('form-descricao').value = dados.choices[0].message.content.trim();
         status.innerText = "Concluído!";
+        
     } catch (erro) {
-        console.error("Erro completo:", erro);
-        // Agora o erro real e técnico será impresso na tela do celular para sabermos exatamente o que falhou
-        status.innerText = `Erro Técnico: ${erro.message}`;
+        console.error("Erro na API da IA:", erro);
+        status.innerText = `Erro: ${erro.message}`;
     } finally {
         btn.disabled = false;
-        // Só esconde a mensagem se deu certo. Se der erro, a mensagem fica na tela para lermos.
         setTimeout(() => { if(status.innerText === "Concluído!") status.style.display = 'none'; }, 4000);
     }
 }
+
 // ==========================================
 // GERAÇÃO DE RELATÓRIO PDF (COM FILTRO)
 // ==========================================
@@ -251,19 +345,14 @@ window.gerarRelatorioPDF = function() {
     request.onsuccess = function() {
         let registros = request.result;
 
-        // Aplica o filtro de datas se o usuário preencheu os campos
-        if (dataInicio && dataFim) {
-            registros = registros.filter(r => r.data >= dataInicio && r.data <= dataFim);
-        } else if (dataInicio) {
-            registros = registros.filter(r => r.data >= dataInicio);
-        } else if (dataFim) {
-            registros = registros.filter(r => r.data <= dataFim);
-        }
+        if (dataInicio && dataFim) registros = registros.filter(r => r.data >= dataInicio && r.data <= dataFim);
+        else if (dataInicio) registros = registros.filter(r => r.data >= dataInicio);
+        else if (dataFim) registros = registros.filter(r => r.data <= dataFim);
 
-        if (registros.length === 0) { 
-            alert("Não há serviços registrados para este período."); 
-            return; 
-        }
+        // Ordena por data antes de imprimir
+        registros.sort((a, b) => new Date(a.data) - new Date(b.data));
+
+        if (registros.length === 0) { alert("Não há serviços registrados para este período."); return; }
 
         let htmlTabela = '';
         registros.forEach((r, index) => {
@@ -271,7 +360,7 @@ window.gerarRelatorioPDF = function() {
             htmlTabela += `
                 <tr>
                     <td style="border: 1px solid #000; padding: 8px;">${index + 1}</td>
-                    <td style="border: 1px solid #000; padding: 8px;">${r.data}</td>
+                    <td style="border: 1px solid #000; padding: 8px;">${r.data.split('-').reverse().join('/')}</td>
                     <td style="border: 1px solid #000; padding: 8px;">${r.local}</td>
                     <td style="border: 1px solid #000; padding: 8px;">${r.descricao}</td>
                     <td style="border: 1px solid #000; padding: 8px; text-align: center; width: 260px;">${imgTag}</td>
@@ -279,7 +368,6 @@ window.gerarRelatorioPDF = function() {
             `;
         });
 
-        // Define o subtítulo do relatório com base no filtro
         let periodoTexto = "Todos os registros exportados";
         if (dataInicio && dataFim) periodoTexto = `De ${dataInicio.split('-').reverse().join('/')} até ${dataFim.split('-').reverse().join('/')}`;
         else if (dataInicio) periodoTexto = `A partir de ${dataInicio.split('-').reverse().join('/')}`;
